@@ -1,0 +1,188 @@
+---
+title: "Chapter 4. Clustering and classification"
+author: "Tuure Parviainen"
+date: "November 22, 2017"
+output: html_document
+---
+## Chapter 4. Clustering and classification
+
+I completed all the DataCamp exercises prior to proceeding to this exercise. I also looked up some details how to use the RMarkdown more productively and hopefully this report will be clearer than the previous ones.
+
+Today we are looking at the Boston crime
+
+### Boston Data set information:
+
+Variables     | Description
+----------    | --------------------------------------
+crim          | per capita crime rate by town.
+zn            | proportion of residential land zoned for lots over 25,000 sq.ft.
+indus         | proportion of non-retail business acres per town.
+chas          | Charles River dummy variable (= 1 if tract bounds river; 0 otherwise).
+nox           | nitrogen oxides concentration (parts per 10 million).
+rm            | average number of rooms per dwelling.
+age           | proportion of owner-occupied units built prior to 1940.
+dis           | weighted mean of distances to five Boston employment centres.
+rad           | index of accessibility to radial highways.
+tax           | full-value property-tax rate per \$10,000.
+ptratio       | pupil-teacher ratio by town.
+black         | 1000(Bk - 0.63)^2 where Bk is the proportion of blacks by town.
+lstat         | lower status of the population (percent).
+medv          | median value of owner-occupied homes divided by $1000s.
+
+
+```{r, message=FALSE, warning=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+require("easypackages") # for loading and installing many packages at one time
+packages_to_load <- c("broom", "dplyr", "MASS", "tidyverse", "corrplot", "ggplot2", "GGally", "caret", "devtools", "ggthemes", "scales", "plotly")
+packages(packages_to_load, prompt = TRUE) # lock'n'load install/load
+#Additionally
+#install_github("fawda123/ggord") # Installed from Github for vizualization
+library(ggord)
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+# To empty the memory after the excercise before this
+# rm(list=ls())
+# Load data
+# setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) # to set working directory to source file
+
+# load the data
+data("Boston")
+glimpse(Boston)
+
+```
+
+All are numeric variables except chas and rad. The data has demographical data of boston including tax and other information possibly linked to crime rates within the city.
+
+```{r, message=FALSE, warning=FALSE}
+
+my_fn <- function(data, mapping, ...){
+  p <- ggplot(data = data, mapping = mapping) +
+    geom_point() +
+    geom_smooth(method=loess, fill="red", color="red", ...) +
+    geom_smooth(method=lm, fill="blue", color="blue", ...)
+  p
+}
+g = ggpairs(Boston,columns = c(1:14), lower = list(continuous = my_fn))
+g
+
+```
+
+1. It seems that indus, nox, rad, tax and lstat have positive correlation with crime, and dis, black and medv have negative correlation with crime.
+2. Many of the variables seems to have non-linear relationships (red lines in the picture), however the variables with high correlation seems to be more linear.
+
+```{r, message=FALSE, warning=FALSE}
+
+# calculate the correlation matrix and round it
+cor_matrix<-cor(Boston) %>% round(digits = 2)
+
+# visualize the correlation matrix
+corrplot(cor_matrix, method="circle", type = "upper", cl.pos = "b", tl.pos = "d", tl.cex = 0.6)
+
+```
+
+More focused figure on correlation, since they are hardly visible with this many variables.
+
+```{r, message=FALSE, warning=FALSE}
+
+# Scaling the variables with mean and standard deviation with scale()
+Boston_scaled <- as.data.frame(scale(Boston))
+# create a quantile vector of crime and print it
+bins <- quantile(Boston_scaled$crim)
+bins
+# create a categorical variable 'crim'
+crime <- cut(Boston_scaled$crim, breaks = bins, include.lowest= TRUE, label = c("low","med_low","med_high", "high"))
+
+# remove original crim from the dataset
+Boston_scaled <- dplyr::select(Boston_scaled, -crim)
+
+# add the new categorical value to scaled data
+Boston_scaled <- data.frame(Boston_scaled, crime)
+
+# number of rows in the Boston dataset
+n <-nrow(Boston)
+
+# choose randomly 80% of the rows
+ind <- sample(n,  size = n * 0.8)
+
+# create train set
+train <- Boston_scaled[ind,]
+
+# create test set
+test <- Boston_scaled[-ind,]
+
+# save the correct classes from test data
+correct_classes <-test$crime
+
+# remove the crime variable from test data
+test <- dplyr::select(test, -crime)
+
+summary(train)
+
+```
+
+Now we have generated the test dataset with the new categorial variable "crime", which is based on the quantiles of the original numeric variable.
+
+```{r, message=FALSE, warning=FALSE}
+
+# linear discriminant analysis
+lda.fit <- lda(crime ~., data = train)
+
+# print the lda.fit object
+lda.fit
+
+g <- ggord(lda.fit, train$crime, ellipse_pro = 0.95, vec_ext = 2, alpha_el = 0.3, size = 2)
+g  + theme_tufte()  + geom_rangeframe()
+
+```
+
+1. We get the points seperated only by the 1st LD and rad parameter in the high group.
+2. From the LDA summary, we can see that how the first linear discriminant explain 94.72 % of the between-group variance in the Boston dataset.
+3. Also the rad (= index of accessibility to radial highways) has relatively high value in the first discriminant, so it proves to be uselful in the classification. rad had negative correlation with crime.
+
+```{r, message=FALSE, warning=FALSE}
+# predict classes with test data
+lda.pred <- predict(lda.fit, newdata = test)
+
+# cross tabulate the results
+table(correct = correct_classes, predicted = lda.pred$class)
+
+```
+
+In the high -crime quartile, we could predict all cases, but for other classes we didn't do so well. However, LDA seems to be able to predict our cases with quite good accuracy.
+
+```{r, message=FALSE, warning=FALSE}
+# k-means clustering
+BostonS <- scale(Boston) # standardize variables
+
+wss <- (nrow(BostonS)-1)*sum(apply(BostonS,2,var))
+for (i in 2:15) wss[i] <- sum(kmeans(BostonS, 
+  	centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+  ylab="Within groups sum of squares")
+
+
+km <-kmeans(BostonS, centers = 4)
+
+# plot the Boston dataset with clusters
+pairs(BostonS, col = km$cluster)
+```
+We see similar results than in LDA
+
+```{r, message=FALSE, warning=FALSE}
+model_predictors <- dplyr::select(train, -crime)
+# check the dimensions
+dim(model_predictors)
+dim(lda.fit$scaling)
+# matrix multiplication
+matrix_product <- as.matrix(model_predictors) %*% lda.fit$scaling
+matrix_product <- as.data.frame(matrix_product)
+
+plot_ly(x = matrix_product$LD1, y = matrix_product$LD2, z = matrix_product$LD3, type= 'scatter3d', mode='markers')
+
+```
+
+Now we can see the 3D picture of the clusters!
