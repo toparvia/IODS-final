@@ -67,14 +67,18 @@ BostonGraph <-BostonGraph[complete.cases(BostonGraph),]
 # Here we plot all the distributions to a QQ plots
 ggplot(data = BostonGraph, mapping = aes(sample = value)) +
   stat_qq(aes(color=group)) + facet_wrap(~variable, scales = 'free')
+# Here we plot are histograms so we can evaluate the impact to the variables
+ggplot(data = BostonGraph, mapping = aes(x = value)) +
+  geom_histogram(aes(fill=group),bins = 15) + facet_wrap(~variable, scales = 'free')
+
 
 # Here we see the impact of the scaled and transformed crim variable
 ggplot(data = subset(BostonGraph,variable == "crim"), mapping = aes(x = value)) +
-  geom_histogram(bins = 15, aes(color=group)) + facet_wrap(~group)
+  geom_histogram(bins = 15, aes(fill=group)) + facet_wrap(~group)
 
 # We also look at the median value (medv)
 ggplot(data = subset(BostonGraph,variable == "medv"), mapping = aes(x = value)) +
-  geom_histogram(bins = 15, aes(color=group)) + facet_wrap(~group)
+  geom_histogram(bins = 15, aes(fill=group)) + facet_wrap(~group)
 
 # No need for transformation (medv)
 
