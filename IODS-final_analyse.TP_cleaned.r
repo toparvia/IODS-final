@@ -10,6 +10,10 @@
 # LOG
 #Try reloading and running again? MGCV might do something odd?
 
+# https://m-clark.github.io/docs/GAM.html#generalized_additive_models
+# PCA GAM
+# http://www.win-vector.com/blog/2016/05/pcr_part2_yaware/
+# https://github.com/WinVector/PreparingDataWorkshop/blob/master/YAwarePCA/YAwarePCA.Rmd
 # Loading packages
 
 require("easypackages") # for loading and installing many packages at one time
