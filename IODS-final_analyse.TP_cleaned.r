@@ -2,16 +2,23 @@
 # author: "Tuure Parviainen"
 # date: "December 5, 2017"
 
-# As there is not that much manipulation to be done, for such used test dataset as Boston, I'll look into normality of assumptions in the data as often at least prices are log-normal, so perhaps some transformations are in order. I'll use shapiro test and fitdistrplus package to analyse the distribution of the each variable.
+# As there is not that much manipulation to be done, for such used test dataset as Boston,
+# I'll look into normality of assumptions in the data as often at least prices are log-normal,
+# so perhaps some transformations are in order.
+# I'll use shapiro test and fitdistrplus package to analyse the distribution of the each variable.
+
+# LOG
+#Try reloading and running again? MGCV might do something odd?
 
 # Loading packages
 
 require("easypackages") # for loading and installing many packages at one time
-packages_to_load <- c("dplyr", "tidyverse", "ggplot2", "GGally", "MASS", "reshape2", "FactoMineR", "factoextra", "pls")
+packages_to_load <- c("dplyr", "tidyverse", "ggplot2", "GGally", "MASS", "reshape2", "FactoMineR", "factoextra", "pls", "visreg", "mgcv", "ggpubr")
 packages(packages_to_load, prompt = TRUE) # lock'n'load install/load
 
 # rm(list = ls())
-
+######################################################################################
+#DataSet Loading and division to train and test sets
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) # to set
 
 # set the seed to make your partition reproductible
@@ -30,16 +37,24 @@ testb <- boston[-train_ind, ]
 
 # 2) Scaled dataset
 bostons <- read.table("data/bostons.txt")
+# 70% of the sample size
+
+train_inds <- sample(seq_len(nrow(bostons)), size = sample_size)
+# splitting data by the vector
+trainbs <- bostons[train_inds, ]
+testbs <- bostons[-train_inds, ]
+
+
 # 3) Scaled dataset with the crim transformed with the square transformation (log can't deal with zeros).
 bostonssq <- read.table("data/bostonssq.txt")
 # General note: It seems that some of the data has been censored for the high tax category
+# 70% of the sample size
 
-
-train_ind <- sample(seq_len(nrow(bostonssq)), size = sample_size)
+train_indssq <- sample(seq_len(nrow(bostonssq)), size = sample_size)
 # splitting data by the vector
-trainbssq <- boston[train_ind, ]
-testbssq <- boston[-train_ind, ]
-
+trainbssq <- bostonssq[train_indssq, ]
+testbssq <- bostonssq[-train_indssq, ]
+######################################################################################
 # We are going to look at the nitrous oxide with the data available.
 
 # Data exploration
@@ -53,7 +68,6 @@ my_fn <- function(data, mapping, ...){
 }
  g = ggpairs(boston, lower = list(continuous = my_fn))
  g
-# columns = c(2:7)
 ######################################################################################
 # Normal dataset
 ######################################################################################
@@ -82,21 +96,31 @@ summary(m2)$r.squared
 # R2 = 78 %
 
 # Testing how the predicted values fit with the actual values
-pred <- predict(m2, newdata = trainb)
+pred.test <- predict(m2, newdata = testb)
 
-plot(pred,trainb$nox, xlab="predicted",ylab="actual")
-abline(a=0,b=1)
+#simple
+#plot(pred,testb$nox, xlab="predicted",ylab="actual")
+#abline(a=0,b=1)
+
+#Neat
+lm.scatter <- data.frame(pred.test, testb$nox)
+colnames(lm.scatter) <- c("pred.test","nox")
+ggscatterhist(lm.scatter, x = "pred.test", y = "nox",
+              color = "#00AFBB",
+              margin.params = list(fill = "lightgray"))
 
 #Calculating mean squared error
-pred.test <- predict(m2, newdata = testb)
+#pred.test <- predict(m2, newdata = testb)
 mse.train <- summary(m2)$sigma^2
 mse.test  <- sum((pred.test - testb$nox)^2)/(nrow(testb)-length(trainb)-2)
 
 mse.train
 mse.test
-mse.train/mse.test
-# Mean squared error ratio is 92 %
-# This suggests that the new data can be predicted with good accuracy.
+(1-mse.train/mse.test) *100
+# Mean squared error ratio is 7.7 %
+# This suggests that the new test data can be predicted with similar accuracy than the train data.
+
+
 
 ######################################################################################
 # PCA
@@ -104,18 +128,20 @@ mse.train/mse.test
 # Note that, by default, the function PCA() [in FactoMineR], standardizes the data automatically during the PCA; so you don’t need do this transformation before the PCA.
 
 res.pca <- PCA(boston, graph = FALSE)
+#summary(res.pca)
+
 # How many dimensions we need
 fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
 # Individuals and dimensions
 fviz_pca_biplot(res.pca)
 # Contributions of variables to PC1, PC2, PC3
 fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
-fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
-fviz_contrib(res.pca, choice = "var", axes = 3, top = 10)
-fviz_contrib(res.pca, choice = "var", axes = 1:3, top = 10)
+#fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
+#fviz_contrib(res.pca, choice = "var", axes = 3, top = 10)
+#fviz_contrib(res.pca, choice = "var", axes = 1:3, top = 10)
 
-eig.val <- get_eigenvalue(res.pca)
-eig.val
+#eig.val <- get_eigenvalue(res.pca)
+#eig.val
 
 # With eigenvalue higher than 1 are included. dim 1:3.
 
@@ -124,22 +150,22 @@ fviz_pca_var(res.pca, select.var= list(cos2 = 5))
 
 # With LM we had: crim + indus + age + dis + rad + ptratio + medv
 # With PCA:  medv + indus + dis + lstat and nox
+# The trouble is our data is still highly dimensional. What to do?
 
-#http://www.win-vector.com/blog/2016/05/pcr_part1_xonly/
 
 ######################################################################################
 # LM on PCA so PCR
 
 pcr_model <- pcr(nox~., data = boston, scale = TRUE, validation = "CV")
-summary(pcr_model)
+#summary(pcr_model)
 
-validationplot(pcr_model)
-validationplot(pcr_model, val.type="MSEP")
+#validationplot(pcr_model)
+#validationplot(pcr_model, val.type="MSEP")
 validationplot(pcr_model, val.type = "R2")
 
 # What you would like to see is a low cross validation error with a lower number of components than the number of variables in your dataset. If this is not the case or if the smalles cross validation error occurs with a number of components close to the number of variables in the original data, then no dimensionality reduction occurs. In the example above, it looks like 3 components are enough to explain more than 90% of the variability in the data although the CV score is a little higher than with 4 or 5 components. Finally, note that 6 components explain all the variability as expected.
 predplot(pcr_model)
-coefplot(pcr_model)
+#coefplot(pcr_model)
 
 #Test train
 pcr_model <- pcr(nox~., data = trainb ,scale =TRUE, validation = "CV")
@@ -147,16 +173,17 @@ pcr_model <- pcr(nox~., data = trainb ,scale =TRUE, validation = "CV")
 pcr_pred <- predict(pcr_model, testb, ncomp = 2)
 mean((pcr_pred - testb$nox)^2)
 
+# 0.2822
 # PCR seems worse than linear regression.
 
-plot(pcr_model, ncomp = 5) # Plot of cross-validated predictions
-plot(pcr_model, "scores") # Score plot
-plot(pcr_model, "loadings", comps = 1:3) # The three first loadings
-plot(pcr_model, "coef", ncomp = 5) # Coefficients
-plot(pcr_model, "val") # RMSEP curves
+plot(pcr_model, ncomp = 2) # Plot of cross-validated predictions
+#plot(pcr_model, "scores") # Score plot
+#plot(pcr_model, "loadings", comps = 1:3) # The three first loadings
+#plot(pcr_model, "coef", ncomp = 5) # Coefficients
+#plot(pcr_model, "val") # RMSEP curves
 plot(pcr_model, "val", val.type = "MSEP", estimate = "CV") # CV MSEP
 
-library(ggpubr)
+#library(ggpubr)
 pcr_pred <- data.frame(pcr_pred)
 colnames(pcr_pred) <- "pcr_pred"
 scatter <- cbind(testb$nox, pcr_pred)
@@ -176,173 +203,142 @@ ggscatterhist(
 # scaled dataset
 ######################################################################################
 
-
-# 70% of the sample size
-sample_size <- floor(0.70 * nrow(bostons))
-
-# set the seed to make your partition reproductible
-set.seed(777)
-train_ind <- sample(seq_len(nrow(bostons)), size = sample_size)
-# splitting data by the vector
-trainb <- bostons[train_ind, ]
-testb <- bostons[-train_ind, ]
-
-m <- lm(nox ~ ., data = trainb)
+ms <- lm(nox ~ ., data = trainbs)
 
 # Model is able to explain 78 %
 stepAIC(m, direction = "both")
 
-m2 <- lm(nox ~ crim + indus + age + dis + rad + ptratio + black + medv, data = trainb)
+ms2 <- lm(nox ~ crim + indus + zn + age + dis + rad + rm + ptratio + black + medv, data = trainbs)
 
 # Which is better m or m2 by AIC?
 
-AIC(m,m2)
-anova(m2, m)
+AIC(ms,ms2)
+anova(ms2, ms)
 
 # By AIC more parsimonious model is better.
-plot(m2)
-
+par(mfrow=c(2,2))
+plot(ms2)
+dev.off()
 # Let's look at the data again with the same variables as in M2
-g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
-g
-summary(m2)
-summary(m2)$r.squared
+# g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
+# g
+summary(ms2)
+summary(ms2)$r.squared
 # We still have quite many dimensions in the data. Maybe we could lower the dimensions using PCA?
-# R2 = 78.1 %
+# R2 = 76.5 % R-squared is worse.
 
 # Testing how the predicted values fit with the actual values
-pred <- predict(m2, newdata = trainb)
+pred.s <- predict(m2, newdata = trainbs)
 
-plot(pred,trainb$nox, xlab="predicted",ylab="actual")
+plot(pred.s,trainbs$nox, xlab="predicted",ylab="actual")
 abline(a=0,b=1)
 
 #Calculating mean squared error
-pred.test <- predict(m2, newdata = testb)
-mse.train <- summary(m2)$sigma^2
-mse.test  <- sum((pred.test - testb$nox)^2)/(nrow(testb)-length(trainb)-2)
+pred.test.s <- predict(m2, newdata = testbs)
+mse.train.s <- summary(m2)$sigma^2
+mse.test.s  <- sum((pred.test.s - testbs$nox)^2)/(nrow(testbs)-length(trainbs)-2)
 
-mse.train
-mse.test
-mse.train/mse.test
-# Mean squared error ratio is 92.3 %
-# This suggests that the new data can be predicted with good accuracy, scaling improved 0.3 %.
+mse.train.s
+mse.test.s
+(1-mse.train.s/mse.test.s)*100
+# Mean squared error ratio is 11.3 % Poorer prediction
+# This suggests that the new data can be predicted with good accuracy, scaling decreased peformance by 11 % on new data. Perhaps overfit?
 
 ######################################################################################
 # Transformed dataset
 ######################################################################################
 
-m <- lm(nox ~ ., data = trainbssq)
+mssq <- lm(nox ~ ., data = trainbssq)
 
 # Model is able to explain 78 %
-stepAIC(m, direction = "both")
+stepAIC(mssq, direction = "both")
 
-m2 <- lm(nox ~ crim + indus + age + dis + rad + ptratio + black + medv, data = trainb)
+mssq2 <- lm(nox ~ indus + chas + age + dis + rad + ptratio + medv, data = trainbssq)
 
 # Which is better m or m2 by AIC?
 
-AIC(m,m2)
-anova(m2, m)
+AIC(mssq,mssq2)
+anova(mssq2, mssq , test="Chisq")
 
-# By AIC more parsimonious model is better.
-plot(m2)
-
+# By AIC and Chi's square test model 2 is better.
+par(mfrow=c(2,2))
+plot(mssq2)
+dev.off()
 # Let's look at the data again with the same variables as in M2
-g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
-g
-summary(m2)
-summary(m2)$r.squared
+# g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
+# g
+summary(mssq2)
+summary(mssq2)$r.squared
 # We still have quite many dimensions in the data. Maybe we could lower the dimensions using PCA?
-# R2 = 78 %
+# R2 = 78.9 %
 
 # Testing how the predicted values fit with the actual values
-pred <- predict(m2, newdata = trainb)
+pred.ssq <- predict(mssq2, newdata = trainbssq)
 
-plot(pred,trainb$nox, xlab="predicted",ylab="actual")
+plot(pred.ssq,trainbssq$nox, xlab="predicted",ylab="actual")
 abline(a=0,b=1)
 
 #Calculating mean squared error
-pred.test <- predict(m2, newdata = testb)
-mse.train <- summary(m2)$sigma^2
-mse.test  <- sum((pred.test - testb$nox)^2)/(nrow(testb)-length(trainb)-2)
+pred.test.ssq <- predict(mssq2, newdata = testbssq)
+mse.train.ssq <- summary(mssq2)$sigma^2
+mse.test.ssq  <- sum((pred.test.ssq - testbssq$nox)^2)/(nrow(testbssq)-length(trainbssq)-2)
 
-mse.train
-mse.test
-mse.train/mse.test
-# Mean squared error ratio is 92 %
-# This suggests that the new data can be predicted with good accuracy.
+mse.train.ssq
+mse.test.ssq
+(1 - mse.train.ssq/mse.test.ssq) *100
+# Mean squared error ratio is 12.57 %
+# This suggests that the new data can be predicted with even better accuracy compared to scaled linear regression.
 
-######################################################################################
-# PCA
-
-# Note that, by default, the function PCA() [in FactoMineR], standardizes the data automatically during the PCA; so you don’t need do this transformation before the PCA.
-
-res.pca <- PCA(boston, graph = FALSE)
-# How many dimensions we need
-fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
-# Individuals and dimensions
-fviz_pca_biplot(res.pca)
-# Contributions of variables to PC1, PC2, PC3
-fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
-fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
-fviz_contrib(res.pca, choice = "var", axes = 3, top = 10)
-fviz_contrib(res.pca, choice = "var", axes = 1:3, top = 10)
-
-eig.val <- get_eigenvalue(res.pca)
-eig.val
-
-# With eigenvalue higher than 1 are included. dim 1:3.
-
-# Most influential variables.
-fviz_pca_var(res.pca, select.var= list(cos2 = 5))
-
-# With LM we had: crim + indus + age + dis + rad + ptratio + medv
-# With PCA:  medv + indus + dis + lstat and nox
-
-#http://www.win-vector.com/blog/2016/05/pcr_part1_xonly/
 
 ######################################################################################
-# LM on PCA so PCR
+# LM on PCA so PCR - transformed dataset
 
-pcr_model <- pcr(nox~., data = boston, scale = TRUE, validation = "CV")
-summary(pcr_model)
+pcr_model.ssq <- pcr(nox~., data = bostonssq, scale = TRUE, validation = "CV")
+#summary(pcr_model.ssq)
 
-validationplot(pcr_model)
-validationplot(pcr_model, val.type="MSEP")
-validationplot(pcr_model, val.type = "R2")
+#validationplot(pcr_model.ssq)
+#validationplot(pcr_model.ssq, val.type="MSEP")
+validationplot(pcr_model.ssq, val.type = "R2")
 
-# What you would like to see is a low cross validation error with a lower number of components than the number of variables in your dataset. If this is not the case or if the smalles cross validation error occurs with a number of components close to the number of variables in the original data, then no dimensionality reduction occurs. In the example above, it looks like 3 components are enough to explain more than 90% of the variability in the data although the CV score is a little higher than with 4 or 5 components. Finally, note that 6 components explain all the variability as expected.
-predplot(pcr_model)
-coefplot(pcr_model)
+# What you would like to see is a low cross validation error with a lower number of components than the number of variables in your dataset.
+# If this is not the case or if the smalles cross validation error occurs with a number of components close to the number of variables in the original data,
+# then no dimensionality reduction occurs. In the example above, it looks like 3 components are enough to explain more than 90% of the variability in the
+# data although the CV score is a little higher than with 4 or 5 components. Finally, note that 6 components explain all the variability as expected.
+predplot(pcr_model.ssq)
+#coefplot(pcr_model.ssq)
 
 #Test train
-pcr_model <- pcr(nox~., data = trainb ,scale =TRUE, validation = "CV")
+pcr_model.ssq <- pcr(nox~., data = trainbssq ,scale =TRUE, validation = "CV")
 
-pcr_pred <- predict(pcr_model, testb, ncomp = 2)
-mean((pcr_pred - testb$nox)^2)
+pcr_pred.ssq <- predict(pcr_model.ssq, testbssq, ncomp = 2)
+mean((pcr_pred.ssq - testbssq$nox)^2)
 
-# PCR seems worse than linear regression.
+# normal PCR MSE      0.2822
+# transformed PCR MSE 0.2514871
+# transformed PCR gives better MSE.
 
-plot(pcr_model, ncomp = 5) # Plot of cross-validated predictions
-plot(pcr_model, "scores") # Score plot
-plot(pcr_model, "loadings", comps = 1:3) # The three first loadings
-plot(pcr_model, "coef", ncomp = 5) # Coefficients
-plot(pcr_model, "val") # RMSEP curves
-plot(pcr_model, "val", val.type = "MSEP", estimate = "CV") # CV MSEP
+
+plot(pcr_model.ssq, ncomp = 2) # Plot of cross-validated predictions
+#plot(pcr_model, "scores") # Score plot
+#plot(pcr_model, "loadings", comps = 1:3) # The three first loadings
+#plot(pcr_model, "coef", ncomp = 5) # Coefficients
+#plot(pcr_model, "val") # RMSEP curves
+plot(pcr_model.ssq, "val", val.type = "MSEP", estimate = "CV") # CV MSEP
 
 library(ggpubr)
-pcr_pred <- data.frame(pcr_pred)
-colnames(pcr_pred) <- "pcr_pred"
-scatter <- cbind(testb$nox, pcr_pred)
-ggscatterhist(scatter, x = "pcr_pred", y = "testb$nox",
+pcr_pred.ssq <- data.frame(pcr_pred.ssq)
+colnames(pcr_pred.ssq) <- "pcr_pred.ssq"
+scatter <- cbind(testbssq$nox, pcr_pred.ssq)
+ggscatterhist(scatter, x = "pcr_pred.ssq", y = "testbssq$nox",
               color = "#00AFBB",
               margin.params = list(fill = "lightgray"))
-ggscatterhist(
-  scatter, x = "pcr_pred", y = "testb$nox",
-  color = "blue", size = 3, alpha = 0.6,
-  palette = c("#00AFBB", "#E7B800", "#FC4E07"),
-  margin.plot = "boxplot",
-  ggtheme = theme_bw()
-)
+# ggscatterhist(
+#   scatter, x = "pcr_pred", y = "testb$nox",
+#   color = "blue", size = 3, alpha = 0.6,
+#   palette = c("#00AFBB", "#E7B800", "#FC4E07"),
+#   margin.plot = "boxplot",
+#   ggtheme = theme_bw()
+# )
 
 ######################################################################################
 # Y-aware PCA
@@ -407,13 +403,13 @@ rsq <- function(x,y) {
 }
 
 ######################################################################################
-# The high sig means insignificant variables, remove chas
-dotplot_identity(scoreFrame, "varName", "sig", "vartype") +
-  coord_flip()  + ggtitle("vtreat variable significance estimates")+
-  scale_color_manual(values = c("noise" = "#d95f02", "signal" = "#1b9e77"))
+# The high sig means insignificant variables, remove chas?
+# dotplot_identity(scoreFrame, "varName", "sig", "vartype") +
+#   coord_flip()  + ggtitle("vtreat variable significance estimates")+
+#   scale_color_manual(values = c("noise" = "#d95f02", "signal" = "#1b9e77"))
 
 # prepare the treated frames, with y-aware scaling
-examplePruneSig = 0.2
+examplePruneSig = 1
 trainbNTreatedYScaled <- prepare(treatmentsN,trainb,pruneSig=examplePruneSig,scale=TRUE)
 testbNTreatedYScaled <- prepare(treatmentsN,trainb,pruneSig=examplePruneSig,scale=TRUE)
 
@@ -422,7 +418,7 @@ ranges = vapply(trainbNTreatedYScaled, FUN=function(col) c(min(col), max(col)), 
 rownames(ranges) = c("vmin", "vmax")
 rframe = as.data.frame(t(ranges))  # make ymin/ymax the columns
 rframe$varName = rownames(rframe)
-varnames = setdiff(rownames(rframe), "y")
+varnames = setdiff(rownames(rframe), "nox")
 rframe = rframe[varnames,]
 rframe$vartype = ifelse(grepl("noise", rframe$varName), "noise", "signal")
 
@@ -431,11 +427,11 @@ names(trainbNTreatedYScaled )
 #summary(trainbNTreatedYScaled)
 summary(trainbNTreatedYScaled[, c("nox", "rad_clean", "indus_clean", "ptratio_clean", "medv_clean")])
 
-barbell_plot(rframe, "varName", "vmin", "vmax", "vartype") +
-  coord_flip() + ggtitle("y-scaled variables: ranges") +
-  scale_color_manual(values = c("noise" = "#d95f02", "signal" = "#1b9e77"))
+# barbell_plot(rframe, "varName", "vmin", "vmax", "vartype") +
+#   coord_flip() + ggtitle("y-scaled variables: ranges") +
+#   scale_color_manual(values = c("noise" = "#d95f02", "signal" = "#1b9e77"))
 
-vars <- setdiff(colnames(trainbNTreatedYScaled),'y')
+vars <- setdiff(colnames(trainbNTreatedYScaled),'nox')
 # prcomp defaults to scale. = FALSE, but we already scaled/centered in vtreat- which we don't want to lose.
 dmTrain <- as.matrix(trainbNTreatedYScaled[,vars])
 dmTest <- as.matrix(trainbNTreatedYScaled[,vars])
@@ -446,7 +442,7 @@ dotplot_identity(frame = data.frame(pc=1:length(princ$sdev),
   ggtitle("Y-Scaled variables: Magnitudes of singular values")
 
 proj <- extractProjection(3,princ) # taking the first 3 principal components
-rot5 <- extractProjection(5,princ)
+rot5 <- extractProjection(5,princ) # taking the first 3 principal components
 rotf = as.data.frame(rot5)
 rotf$varName = rownames(rotf)
 rotflong = gather(rotf, "PC", "loading", starts_with("PC"))
@@ -462,13 +458,17 @@ projectedTrain <- as.data.frame(dmTrain %*% proj,
                                 stringsAsFactors = FALSE)
 # plot data sorted by principal components
 projectedTrain$nox <- dTrainNTreatedYScaled$nox
-ScatterHistN(projectedTrain,'PC1','PC3','nox',
+ScatterHistN(projectedTrain,'PC1','PC2','nox',
              "Y-Scaled Training Data projected to first two principal components")
 
 model <- lm(nox~PC1+PC2+PC3,data=projectedTrain)
 model2 <- lm(nox~PC1+PC2,data=projectedTrain)
 AIC(model,model2)
-summary(model)
+summary(model2)
+
+#WHY IS THE MODEL SUDDENLY SO ODD? TRACEBACK!
+
+dev.off()
 plot(model, 2)
 
 
@@ -494,7 +494,7 @@ ScatterHist(projectedTest,'estimate','nox','Recovered model versus truth (y awar
             smoothmethod='identity',annot_size=3)
 
 #gam
-library(mgcv)
+#library(mgcv)
 
 
 gmodel <- gam(nox ~ s(PC1) + PC2 + PC3, family  = gaussian, data=projectedTrain,
@@ -560,9 +560,4 @@ fviz_contrib(res.pcaY, choice = "var", axes = 1:2, top = 10)
 eig.val <- get_eigenvalue(res.pcaY)
 eig.val
 
-# With eigenvalue higher than 1 are included. dim 1:3.
 
-# Most influential variables.
-fviz_pca_var(res.pcaY, select.var= list(cos2 = 5))
-
-#### WITH PCR
