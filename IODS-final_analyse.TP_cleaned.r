@@ -457,11 +457,11 @@ dotplot_identity(rotflong, "varName", "loading", "vartype") +
   ggtitle("Y-Scaled Variable loadings, first five principal components") +
   scale_color_manual(values = c("noise" = "#d95f02", "signal" = "#1b9e77"))
 
-# apply projection
+# apply projection for TRAIN
 projectedTrain <- as.data.frame(dmTrain %*% proj,
                                 stringsAsFactors = FALSE)
 # plot data sorted by principal components
-projectedTrain$nox <- dTrainNTreatedYScaled$nox
+projectedTrain$nox <- trainbNTreatedYScaled$nox
 ScatterHistN(projectedTrain,'PC1','PC2','nox',
              "Y-Scaled Training Data projected to first two principal components")
 
@@ -470,7 +470,6 @@ model2 <- lm(nox~PC1+PC2,data=projectedTrain)
 AIC(model,model2)
 summary(model2)
 
-#WHY IS THE MODEL SUDDENLY SO ODD? TRACEBACK!
 
 dev.off()
 plot(model, 2)
@@ -481,60 +480,85 @@ trainrsq = rsq(projectedTrain$estimate,projectedTrain$nox)
 
 ScatterHist(projectedTrain,'estimate','nox','Recovered model versus truth (y aware PCA train)',
             smoothmethod='identity',annot_size=3)
+# Upper end of values consistently predicts lower than actual
 
-# apply projection
+# apply projection for TEST
 projectedTest <- as.data.frame(dmTest %*% proj,
                                stringsAsFactors = FALSE)
 # plot data sorted by principal components
-projectedTest$nox <- dTestNTreatedYScaled$nox
+projectedTest$nox <- trainbNTreatedYScaled$nox
 ScatterHistN(projectedTest,'PC1','PC2','nox',
              "Y-Scaled Test Data projected to first two principal components")
 
-projectedTest$estimate <- predict(model,newdata=projectedTest)
+projectedTest$estimate <- predict(model2,newdata=projectedTest)
 testrsq = rsq(projectedTest$estimate,projectedTest$nox)
 testrsq
+
+# We can explain 73.1 % of the variation on the test dataset.
 
 ScatterHist(projectedTest,'estimate','nox','Recovered model versus truth (y aware PCA test)',
             smoothmethod='identity',annot_size=3)
 
-#gam
-#library(mgcv)
+######################################################################################
+# GAM - Generalized additive model on PCA
 
+# Since we saw that there was some data that we coudn't explain with linear models,
+# we will try to use more flexible approaches, namely Generilized additive models on the
+# y-scaled PCA dimensions. Basically we hope that we are able to use only few dimensions to
+# model the data and capture the variability not accounted in the linear model with GAM.
+
+require(mgcv)
 
 gmodel <- gam(nox ~ s(PC1) + PC2 + PC3, family  = gaussian, data=projectedTrain,
-    trace=FALSE)
-
-gmodel2 <- gam(nox ~ s(PC1) + PC2 + PC3, family  = gaussian, data=projectedTrain,
               trace=FALSE)
+
+gmodel2 <- gam(nox ~ s(PC1) + PC2, family  = gaussian, data=projectedTrain,
+               trace=FALSE)
 gmodel3 <- gam(nox ~ s(PC1, bs="cr") + PC2, data=projectedTrain)
+gmodel3.5 <- gam(nox ~ s(PC1, bs="cr")+ s(PC2, bs="cr"), data=projectedTrain)
 gmodel4 <- gam(nox ~ s(PC1, bs="cr") + PC2 + PC3, data=projectedTrain)
-gmodel5 <- gam(nox ~ te(PC1, PC2),method="REML", data=projectedTrain)
+gmodel5 <- gam(nox ~ te(PC1, PC2), data=projectedTrain)
 gmodel6 <- gam(nox ~ te(PC1, PC2) + PC3, data=projectedTrain)
+
 
 # te =  tensor product smooth, and by smoothing the marginal smooths of PC1 and PC2
 
-AIC(gmodel,gmodel2,gmodel3,gmodel4,gmodel5,gmodel6)
+AIC(gmodel,gmodel2,gmodel3,gmodel3.5, gmodel4,gmodel5,gmodel6)
+
+#models 5 and 6 give most negative (smallest values)
+
+# AIC = -2Ln(L)+ 2k
 
 #par(mfrow=c(1,3)) #to partition the Plotting Window
-plot(gmodel,se = TRUE)
-plot(gmodel4,se = TRUE)
+plot(gmodel5,se = TRUE)
+plot(gmodel6,se = TRUE)
 #se stands for standard error Bands
 
-summary(gmodel2)$r.sq
-summary(gmodel)$sp.criterion
+summary(gmodel5)$r.sq
+summary(gmodel5)$sp.criterion
+summary(gmodel6)$r.sq
+summary(gmodel6)$sp.criterion
+
 anova(gmodel,gmodel2,gmodel3,gmodel4,gmodel5,gmodel6, test="Chisq")
 
-vis.gam(gmodel6, type='response', plot.type='contour')
-visreg2d(gmodel6, xvar='PC1', yvar='nox', scale='response')
-visreg2d(gmodel6, xvar='PC2', yvar='nox', scale='response')
+#Model 5 is selected by AIC and Chi squared test
+
+#vis.gam(gmodel5, type='response', plot.type='contour')
+vis.gam(gmodel5, main = "Tensor product smooth of 1:2 PC", plot.type = "contour",
+        color = "terrain", contour.col = "black", lwd = 2)
+visreg2d(gmodel5, xvar='PC1', yvar='nox', scale='response')
+visreg2d(gmodel5, xvar='PC2', yvar='nox', scale='response')
+#visreg2d(gmodel5, xvar='PC3', yvar='nox', scale='response')
+vis.gam(gmodel5, n.grid = 50, theta = 125, phi = 32, zlab = "",
+        ticktype = "detailed", color = "topo", main = "Tensor product smooth of 1:2 PC")
+
 
 # Lets confirm out model with replications of K (the smoother term)
 par(mfrow=c(1,3))
 gam.check(gmodel5, k.rep=1000, type=c("pearson"))
-qq.gam(gmodel5)
-plot(gmodel5,pages=1)
-
-gam.check(gmodel6, k.rep=1000, type=c("pearson"))
+qq.gam(gmodel6)
+plot(gmodel5)
+dev.off()
 
 #visreg2d(gmodel6, xvar='PC3', yvar='nox', scale='response')
 
@@ -543,10 +567,15 @@ gam.check(gmodel6, k.rep=1000, type=c("pearson"))
 
 projectedTest$g.estimate <- predict(gmodel5, newdata = projectedTest)
 
-trainrsq_gam = rsq(projectedTest$g.estimate ,projectedTrain$nox)
+trainrsq_gam = rsq(projectedTest$g.estimate ,projectedTest$nox)
+trainrsq_gam
+testrsq
+
+#GAM model provides better accuracy in predicting test outcome.
 
 ScatterHist(projectedTest,'g.estimate','nox','Recovered model versus truth (y aware PCA test) GAM ',
             smoothmethod='identity',annot_size=3)
+
 
 #### WITH FACTOMINER
 
