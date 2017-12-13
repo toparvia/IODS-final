@@ -1,0 +1,291 @@
+---
+title: "IODS-Final"
+author: "Tuure Parviainen"
+date: "December 13, 2017"
+output: html_document
+---
+# IODS-Final: Boston dataset
+
+I completed all the DataCamp exercises prior to proceeding to this exercise. I also looked up some details how to use the RMarkdown more productively and hopefully this report will be clearer than the previous ones.
+
+Today we are looking at the Boston **nitrogen oxides concentration**.
+
+### Boston Data set information:
+
+Variables     | Description
+----------    | --------------------------------------
+crim          | per capita crime rate by town.
+zn            | proportion of residential land zoned for lots over 25,000 sq.ft.
+indus         | proportion of non-retail business acres per town.
+chas          | Charles River dummy variable (= 1 if tract bounds river; 0 otherwise).
+nox           | nitrogen oxides concentration (parts per 10 million).
+rm            | average number of rooms per dwelling.
+age           | proportion of owner-occupied units built prior to 1940.
+dis           | weighted mean of distances to five Boston employment centres.
+rad           | index of accessibility to radial highways.
+tax           | full-value property-tax rate per \$10,000.
+ptratio       | pupil-teacher ratio by town.
+black         | 1000(Bk - 0.63)^2 where Bk is the proportion of blacks by town.
+lstat         | lower status of the population (percent).
+medv          | median value of owner-occupied homes divided by $1000s.
+
+All are numeric variables except "chas", "rad" "tax". The data has demographical data of Boston (N = 506) including tax and several variables possibly linked to crime rates within the city. However, in the previous exercise we found that nitrogen oxide concentration is linked to crime and other demographic variables, so we are going to explore how they are linked. In the [data preparation](https://github.com/toparvia/IODS-final/blob/master/IODS-final_dataprep.TP.r) we looked at the normality assumption of the data and found out that "crim", per capita crime rate might benefit from square transformation. Therefore the data is divided into three different datasets, which are further divided with random sample to train (70%) and tests(30%) datasets.
+
+1. Normal unchanged dataset
+    + 1a Normal train
+    + 1b Normal test
+2. Scaled dataset
+    + 2a Scaled train
+    + 2b Scaled test
+3. Scaled dataset with the "crim" variable transformed with the square transformation
+    + 3a transformed and scaled train
+    + 3b transformed and scaled test
+
+## Data exploration
+
+```{r, message=FALSE, warning=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+require("easypackages") # for loading and installing many packages at one time
+packages_to_load <- c("broom", "dplyr", "tidyverse", "corrplot", "ggplot2", "GGally", "caret", "devtools", "ggthemes", "scales", "reshape2","MASS", "ggpubr","WVPlots")
+packages(packages_to_load, prompt = TRUE) # lock'n'load install/load
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+# set the seed to make your partition reproductible
+set.seed(777)
+
+# 1) Normal unchanged dataset
+boston <- read.table("data/boston.txt")
+
+# 70% of the sample size
+sample_size <- floor(0.70 * nrow(boston))
+
+train_ind <- sample(seq_len(nrow(boston)), size = sample_size)
+# splitting data by the vector
+trainb <- boston[train_ind, ]
+testb <- boston[-train_ind, ]
+
+# 2) Scaled dataset
+bostons <- read.table("data/bostons.txt")
+# 70% of the sample size
+
+train_inds <- sample(seq_len(nrow(bostons)), size = sample_size)
+# splitting data by the vector
+trainbs <- bostons[train_inds, ]
+testbs <- bostons[-train_inds, ]
+
+
+# 3) Scaled dataset with the crim transformed with the square transformation (log can't deal with zeros).
+bostonssq <- read.table("data/bostonssq.txt")
+# General note: It seems that some of the data has been censored for the high tax category
+# 70% of the sample size
+
+train_indssq <- sample(seq_len(nrow(bostonssq)), size = sample_size)
+# splitting data by the vector
+trainbssq <- bostonssq[train_indssq, ]
+testbssq <- bostonssq[-train_indssq, ]
+
+```
+
+
+
+```{r, message=FALSE, warning=FALSE}
+
+my_fn <- function(data, mapping, ...){
+  p <- ggplot(data = data, mapping = mapping) +
+    geom_point() +
+    geom_smooth(method=loess, fill="red", color="red", ...) +
+    geom_smooth(method=lm, fill="blue", color="blue", ...)
+  p
+}
+g = ggpairs(boston,columns = c(1,3,5,7,8,11,10,13:14), lower = list(continuous = my_fn))
+g
+
+```
+
+Selected variables for closer inspection. <span style="color:blue">blue</span> line is linear regression between variables and <span style="color:red">red</span> is LOESS smoother (locally weighted scatterplot smoothing)
+
+1. It seems that indus, nox, rad, tax and lstat have positive correlation with crime, and dis, black and medv have negative correlation with crime.
+2. Many of the variables seems to have non-linear relationships (red lines in the picture), however the variables with high correlation seems to be more linear.
+
+```{r, message=FALSE, warning=FALSE}
+
+# calculate the correlation matrix and round it
+cor_matrix<-cor(boston) %>% round(digits = 2)
+
+# visualize the correlation matrix
+corrplot(cor_matrix, method="circle", type = "upper", cl.pos = "b", tl.pos = "d", tl.cex = 0.6)
+
+```
+
+More focused figure on correlation, since not all were plotted in previous picture. Nitrous oxide concentration has **0.5> positive correlation** with age: proportion of owner-occupied units built prior to 1940, rad: index of accessibility to radial highways, tax: full-value property-tax rate per \$10,000, lstat: lower status of the population (percent). **-0.5 < Negative correlation with dis: weighted mean of distances to five Boston employment centres. These seem to be reasonable relatioships to continue with more in-depth analysis.
+
+```{r, message=FALSE, warning=FALSE}
+
+# We will compare two different transformations for data. Log and square root transformation.
+BostonSq <- sqrt(boston) %>% scale() %>% as.data.frame() %>%  melt()
+BostonSq$group <- "Squared"
+BostonL <- log(boston) %>% scale() %>% as.data.frame() %>%  melt()
+BostonL$group <- "Log"
+BostonN <- boston %>% scale() %>% as.data.frame() %>%  melt()
+BostonN$group <- "Normal"
+
+BostonGraph <- rbind(BostonSq, BostonL, BostonN)
+BostonGraph <-BostonGraph[complete.cases(BostonGraph),]
+
+# Here we plot all the distributions to a QQ plots
+ggplot(data = BostonGraph, mapping = aes(sample = value)) +
+  stat_qq(aes(color=group)) + facet_wrap(~variable, scales = 'free')
+# Here we plot are histograms so we can evaluate the impact to the variables
+ggplot(data = BostonGraph, mapping = aes(x = value)) +
+  geom_histogram(aes(fill=group),bins = 15) + facet_wrap(~variable, scales = 'free')
+
+```
+
+1. Figure shows the QQ-plots of all variables and their two transformations: log- and square-transformation.
++ differences are not big and the only variable that showed non-normality in Shapiro-–Wilk test (p < 0.05) was crime rate.
+2. Second figure shows histograms of same variables. We can see how the transformations change the data.
+
+## Linear regression: Normal dataset
+
+```{r, message=FALSE, warning=FALSE}
+m <- lm(nox ~ ., data = trainb)
+
+# Model is able to explain 78 %
+stepAIC(m, direction = "both")
+
+m2 <- lm(nox ~ crim + indus + chas + age + dis + rad + ptratio + black + medv, data = trainb)
+
+# Which is better m or m2 by AIC?
+
+AIC(m,m2)
+anova(m, m2, test="Chisq")
+
+# By AIC more parsimonious model (m2) is better.
+par(mfrow=c(2,2))
+plot(m2)
+#dev.off()
+
+# Let's look at the data again with the same variables as in M2
+#g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
+#g
+summary(m2)
+#summary(m2)$r.squared
+# We still have quite many dimensions in the data. Maybe we could lower the dimensions using PCA?
+# R2 = 78 %
+
+# Testing how the predicted values fit with the actual values
+pred.test <- predict(m2, newdata = testb)
+
+#simple
+#plot(pred,testb$nox, xlab="predicted",ylab="actual")
+#abline(a=0,b=1)
+
+#Neat
+lm.scatter <- data.frame(pred.test, testb$nox)
+colnames(lm.scatter) <- c("pred.test","nox")
+#Neater
+#ggscatterhist(lm.scatter, x = "pred.test", y = "nox",
+#             color = "#00AFBB",
+#              margin.params = list(fill = "lightgray"))
+#Neatest
+ScatterHist(lm.scatter, "pred.test", "nox",
+            smoothmethod="identity",
+            annot_size=3,
+            title="Recovered model versus truth (Normal dataset, Liner regression)")
+
+#Calculating mean squared error
+#pred.test <- predict(m2, newdata = testb)
+mse.train <- summary(m2)$sigma^2
+mse.test  <- sum((pred.test - testb$nox)^2)/(nrow(testb)-length(trainb)-2)
+
+mse.train
+mse.test
+(1-mse.train/mse.test) *100
+# Mean squared error ratio is 25.1 %
+# This suggests that the new test data can be predicted with some accuracy than the train data.
+
+
+
+```
+
+Model: linear regression **nox** ~ crim + indus + chas + age + dis + rad + ptratio + black + medv
+
+1. The linear regression was relatively good model to predit the nitrous oxide concentration (train, R^2 adj. **79.1 %**)
+2. The test set provided also good accuracy with (test, R^2 **74.1 %**)
+3. The three most influential variables were rad: index of accessibility to radial highways (p = 2.94e-13), dis: weighted mean of distances to five Boston employment centres (p = 1.20e-12), ptratio: pupil-teacher ratio by town (p = 3.74e-12).
+4. We were not able to reduce variables (using Akaike Information criteria to find the best model) and we have many significant variables. This makes the the model more difficult to use in practice.
+
+## Linear regression: Scaled dataset
+
+```{r, message=FALSE, warning=FALSE}
+ms <- lm(nox ~ ., data = trainbs)
+
+# Model is able to explain 78 %
+stepAIC(m, direction = "both")
+
+ms2 <- lm(nox ~ crim + indus + zn + age + dis + rad + rm + ptratio + black + medv, data = trainbs)
+
+# Which is better m or m2 by AIC?
+
+AIC(ms,ms2)
+anova(ms2, ms, test="Chisq")
+
+# By AIC more parsimonious model is better.
+par(mfrow=c(2,2))
+plot(ms2)
+dev.off()
+# Let's look at the data again with the same variables as in M2
+# g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
+# g
+summary(ms2)
+#summary(ms2)$r.squared
+# We still have quite many dimensions in the data. Maybe we could lower the dimensions using PCA?
+# R2 = 76.5 % R-squared is worse.
+
+# Testing how the predicted values fit with the actual values
+pred.s <- predict(m2, newdata = testbs)
+
+#Taking the values for plotting
+lm.scatter.s <- data.frame(pred.s, testb$nox)
+colnames(lm.scatter.s) <- c("pred.test","nox")
+#Neatest
+ScatterHist(lm.scatter, "pred.test", "nox",
+            smoothmethod="identity",
+            annot_size=3,
+            title="Recovered model versus truth (Scaled dataset, Linear regression)")
+
+#Calculating mean squared error
+pred.test.s <- predict(m2, newdata = testbs)
+mse.train.s <- summary(m2)$sigma^2
+mse.test.s  <- sum((pred.test.s - testbs$nox)^2)/(nrow(testbs)-length(trainbs)-2)
+
+mse.train.s
+mse.test.s
+(1-mse.train.s/mse.test.s)*100
+# Mean squared error ratio is 11.3 % Poorer prediction
+# This suggests that the new data can be predicted with good accuracy, scaling decreased peformance by 11 % on new data. Perhaps overfit?
+
+
+```
+
+#HEREEEEEEEEEEEEEEEEEEEEEE
+
+In the high -crime quartile, we could predict all cases, but for other classes we didn't do so well. However, LDA seems to be able to predict our cases with quite good accuracy.
+
+## Linear regression: Scaled and transformed dataset
+
+```{r, message=FALSE, warning=FALSE}
+
+```
+## Conclusions
+
+```{r, message=FALSE, warning=FALSE}
+
+
+```
+
+

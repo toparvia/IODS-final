@@ -1,0 +1,177 @@
+---
+title: "IODS-Final"
+author: "Tuure Parviainen"
+date: "December 13, 2017"
+output: html_document
+---
+# IODS-Final: Boston dataset
+
+I completed all the DataCamp exercises prior to proceeding to this exercise. I also looked up some details how to use the RMarkdown more productively and hopefully this report will be clearer than the previous ones.
+
+Today we are looking at the Boston **nitrogen oxides concentration**.
+
+### Boston Data set information:
+
+Variables     | Description
+----------    | --------------------------------------
+crim          | per capita crime rate by town.
+zn            | proportion of residential land zoned for lots over 25,000 sq.ft.
+indus         | proportion of non-retail business acres per town.
+chas          | Charles River dummy variable (= 1 if tract bounds river; 0 otherwise).
+nox           | nitrogen oxides concentration (parts per 10 million).
+rm            | average number of rooms per dwelling.
+age           | proportion of owner-occupied units built prior to 1940.
+dis           | weighted mean of distances to five Boston employment centres.
+rad           | index of accessibility to radial highways.
+tax           | full-value property-tax rate per \$10,000.
+ptratio       | pupil-teacher ratio by town.
+black         | 1000(Bk - 0.63)^2 where Bk is the proportion of blacks by town.
+lstat         | lower status of the population (percent).
+medv          | median value of owner-occupied homes divided by $1000s.
+
+All are numeric variables except "chas", "rad" "tax". The data has demographical data of Boston (N = 506) including tax and several variables possibly linked to crime rates within the city. However, in the previous exercise we found that nitrogen oxide concentration is linked to crime and other demographic variables, so we are going to explore how they are linked. In the [data preparation](https://github.com/toparvia/IODS-final/blob/master/IODS-final_dataprep.TP.r) we looked at the normality assumption of the data and found out that "crim", per capita crime rate might benefit from square transformation. Therefore the data is divided into three different datasets, which are further divided with random sample to train (70%) and tests(30%) datasets.
+
+1. Normal unchanged dataset
+    + 1a Normal train
+    + 1b Normal test
+2. Scaled dataset
+    + 2a Scaled train
+    + 2b Scaled test
+3. Scaled dataset with the "crim" variable transformed with the square transformation
+    + 3a transformed and scaled train
+    + 3b transformed and scaled test
+
+## Data exploration
+
+```{r, message=FALSE, warning=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+require("easypackages") # for loading and installing many packages at one time
+packages_to_load <- c("broom", "dplyr", "tidyverse", "corrplot", "ggplot2", "GGally", "caret", "devtools", "ggthemes", "scales", "reshape2")
+packages(packages_to_load, prompt = TRUE) # lock'n'load install/load
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+# set the seed to make your partition reproductible
+set.seed(777)
+
+# 1) Normal unchanged dataset
+boston <- read.table("data/boston.txt")
+
+# 70% of the sample size
+sample_size <- floor(0.70 * nrow(boston))
+
+train_ind <- sample(seq_len(nrow(boston)), size = sample_size)
+# splitting data by the vector
+trainb <- boston[train_ind, ]
+testb <- boston[-train_ind, ]
+
+# 2) Scaled dataset
+bostons <- read.table("data/bostons.txt")
+# 70% of the sample size
+
+train_inds <- sample(seq_len(nrow(bostons)), size = sample_size)
+# splitting data by the vector
+trainbs <- bostons[train_inds, ]
+testbs <- bostons[-train_inds, ]
+
+
+# 3) Scaled dataset with the crim transformed with the square transformation (log can't deal with zeros).
+bostonssq <- read.table("data/bostonssq.txt")
+# General note: It seems that some of the data has been censored for the high tax category
+# 70% of the sample size
+
+train_indssq <- sample(seq_len(nrow(bostonssq)), size = sample_size)
+# splitting data by the vector
+trainbssq <- bostonssq[train_indssq, ]
+testbssq <- bostonssq[-train_indssq, ]
+
+```
+
+
+
+```{r, message=FALSE, warning=FALSE}
+
+my_fn <- function(data, mapping, ...){
+  p <- ggplot(data = data, mapping = mapping) +
+    geom_point() +
+    geom_smooth(method=loess, fill="red", color="red", ...) +
+    geom_smooth(method=lm, fill="blue", color="blue", ...)
+  p
+}
+g = ggpairs(boston,columns = c(1,3:5,7,8,13:14), lower = list(continuous = my_fn))
+g
+
+```
+
+Selected variables for closer inspection. <span style="color:blue">blue</span> line is linear regression between variables and <span style="color:red">red</span> is LOESS smoother (locally weighted scatterplot smoothing)
+
+1. It seems that indus, nox, rad, tax and lstat have positive correlation with crime, and dis, black and medv have negative correlation with crime.
+2. Many of the variables seems to have non-linear relationships (red lines in the picture), however the variables with high correlation seems to be more linear.
+
+```{r, message=FALSE, warning=FALSE}
+
+# calculate the correlation matrix and round it
+cor_matrix<-cor(boston) %>% round(digits = 2)
+
+# visualize the correlation matrix
+corrplot(cor_matrix, method="circle", type = "upper", cl.pos = "b", tl.pos = "d", tl.cex = 0.6)
+
+```
+
+More focused figure on correlation, since they are hardly visible with this many variables.
+
+```{r, message=FALSE, warning=FALSE}
+
+# We will compare two different transformations for data. Log and square root transformation.
+BostonSq <- sqrt(boston) %>% scale() %>% as.data.frame() %>%  melt()
+BostonSq$group <- "Squared"
+BostonL <- log(boston) %>% scale() %>% as.data.frame() %>%  melt()
+BostonL$group <- "Log"
+BostonN <- boston %>% scale() %>% as.data.frame() %>%  melt()
+BostonN$group <- "Normal"
+
+BostonGraph <- rbind(BostonSq, BostonL, BostonN)
+BostonGraph <-BostonGraph[complete.cases(BostonGraph),]
+
+# Here we plot all the distributions to a QQ plots
+ggplot(data = BostonGraph, mapping = aes(sample = value)) +
+  stat_qq(aes(color=group)) + facet_wrap(~variable, scales = 'free')
+# Here we plot are histograms so we can evaluate the impact to the variables
+ggplot(data = BostonGraph, mapping = aes(x = value)) +
+  geom_histogram(aes(fill=group),bins = 15) + facet_wrap(~variable, scales = 'free')
+
+```
+
+Now we have generated the test dataset with the new categorial variable "crime", which is based on the quantiles of the original numeric variable.
+
+```{r, message=FALSE, warning=FALSE}
+
+
+
+```
+
+1. We get the points seperated only by the 1st LD and rad parameter in the high group.
+2. From the LDA summary, we can see that how the first linear discriminant explain 94.72 % of the between-group variance in the Boston dataset.
+3. Also the rad (= index of accessibility to radial highways) has relatively high value in the first discriminant, so it proves to be uselful in the classification. rad had negative correlation with crime.
+
+```{r, message=FALSE, warning=FALSE}
+
+
+```
+
+In the high -crime quartile, we could predict all cases, but for other classes we didn't do so well. However, LDA seems to be able to predict our cases with quite good accuracy.
+
+```{r, message=FALSE, warning=FALSE}
+
+```
+We see similar results than in LDA
+
+```{r, message=FALSE, warning=FALSE}
+
+
+```
+
+

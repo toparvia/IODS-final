@@ -1,0 +1,30 @@
+---
+title: "Tuure Parviainen"
+output:
+  html_document:
+    theme: simplex
+    css: styles.css
+    toc: true
+    toc_depth: 2
+    fig_caption: true
+    fig_width: 6
+    fig_height: 4
+    code_folding: hide
+
+
+---
+
+***
+  
+```{r child = "1.DataExplorationLM.Rmd"}
+```
+  
+***
+  
+#```{r child = "2.PCA, PCR.Rmd"}
+#```
+
+***
+  
+#```{r child = "3. Y-scaling PCR.Rmd"}
+#```

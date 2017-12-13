@@ -86,14 +86,16 @@ m2 <- lm(nox ~ crim + indus + age + dis + rad + ptratio + black + medv, data = t
 # Which is better m or m2 by AIC?
 
 AIC(m,m2)
-anova(m2, m)
+anova(m2, m, test="Chisq")
 
 # By AIC more parsimonious model is better.
+par(mfrow=c(2,2))
 plot(m2)
+dev.off()
 
 # Let's look at the data again with the same variables as in M2
-g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
-g
+#g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
+#g
 summary(m2)
 summary(m2)$r.squared
 # We still have quite many dimensions in the data. Maybe we could lower the dimensions using PCA?
@@ -217,7 +219,7 @@ ms2 <- lm(nox ~ crim + indus + zn + age + dis + rad + rm + ptratio + black + med
 # Which is better m or m2 by AIC?
 
 AIC(ms,ms2)
-anova(ms2, ms)
+anova(ms2, ms, test="Chisq")
 
 # By AIC more parsimonious model is better.
 par(mfrow=c(2,2))
