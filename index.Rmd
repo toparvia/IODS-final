@@ -1,5 +1,6 @@
 ---
 title: "Tuure Parviainen"
+email: "tuure.parviainen@helsinki.fi"
 output:
   html_document:
     theme: simplex
@@ -26,5 +27,5 @@ output:
 
 ***
   
-#```{r child = "3. Y-scaling PCR.Rmd"}
-#```
+```{r child = "3. Y-scaling PCR.Rmd"}
+```

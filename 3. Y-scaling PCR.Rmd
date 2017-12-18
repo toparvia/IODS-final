@@ -117,7 +117,6 @@ summary(trainbNTreatedYScaled[, c("nox", "rad_clean", "indus_clean", "ptratio_cl
 
 
 ```
-
 Here is shown few of the treated variables. Notice how the values became very low, but nox is still as it was before.
 
 
@@ -153,7 +152,7 @@ rotflong$vartype = ifelse(grepl("noise", rotflong$varName), "noise", "signal")
 projectedTrain <- as.data.frame(dmTrain %*% proj,
                                 stringsAsFactors = FALSE)
 # plot data sorted by principal components
-# projectedTrain$nox <- trainbNTreatedYScaled$nox
+ projectedTrain$nox <- trainbNTreatedYScaled$nox
 # ScatterHistN(projectedTrain,'PC1','PC2','nox',
 #              "Y-Scaled Training Data projected to first two principal components")
 
@@ -168,7 +167,6 @@ plot(model, 2)
 
 
 ```
-
 We build two models one with three principal components and one with two. By AIC the one with two princibal components is selected for further analysis. We can explain **72%** of deviation.
 
 The lower end is now explained better, but the upper end seems to be poor fit.
@@ -200,6 +198,8 @@ ScatterHist(projectedTest,'estimate','nox','Recovered model versus truth (y awar
             smoothmethod='identity',annot_size=3)
 
 ```
+
+
 
 The model has lower dimensions and quite ok level of explained deviance.
 
@@ -282,11 +282,6 @@ ScatterHist(projectedTest,'g.estimate','nox','Recovered model versus truth (y aw
             smoothmethod='identity',annot_size=3)
 
 ```
+
+
 I unfortunately run out of time, but the last model has the best explanary power and it is most parsimonious, so it is the best model.
-
-```{r, message=FALSE, warning=FALSE}
-
-
-```
-
-
