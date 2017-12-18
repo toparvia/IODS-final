@@ -21,8 +21,8 @@ output:
   
 ***
   
-#```{r child = "2.PCA, PCR.Rmd"}
-#```
+```{r child = "2.PCAPCR.Rmd"}
+```
 
 ***
   

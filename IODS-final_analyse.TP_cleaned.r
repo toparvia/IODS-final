@@ -300,6 +300,8 @@ mse.test.ssq
 # LM on PCA so PCR - transformed dataset
 
 pcr_model.ssq <- pcr(nox~., data = bostonssq, scale = TRUE, validation = "CV")
+pcr_model.ssq <- pcr(nox ~ indus + age + dis + rad + ptratio + medv, data = bostonssq, scale = TRUE, validation = "CV")
+
 #summary(pcr_model.ssq)
 
 #validationplot(pcr_model.ssq)

@@ -151,7 +151,7 @@ AIC(model,model2)
 summary(model2)
 
 
-dev.off()
+#dev.off()
 plot(model, 2)
 
 
