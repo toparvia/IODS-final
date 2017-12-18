@@ -12,6 +12,7 @@ output:
     fig_height: 4
     code_folding: hide
     future: true
+    encoding: UTF-8
 
 
 ---

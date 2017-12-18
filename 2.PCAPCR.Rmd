@@ -48,7 +48,7 @@ testb <- boston[-train_ind, ]
 ######################################################################################
 # PCA
 
-# Note that, by default, the function PCA() [in FactoMineR], standardizes the data automatically during the PCA; so you don’t need do this transformation before the PCA.
+# Note that, by default, the function PCA() [in FactoMineR], standardizes the data automatically during the PCA; so you donâ€™t need do this transformation before the PCA.
 
 res.pca <- PCA(boston, graph = FALSE)
 #summary(res.pca)
