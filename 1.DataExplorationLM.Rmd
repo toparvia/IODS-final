@@ -8,7 +8,17 @@ output: html_document
 
 I completed all the DataCamp exercises prior to proceeding to this exercise. I also looked up some details how to use the RMarkdown more productively and hopefully this report will be clearer than the previous ones.
 
+### Abstract
+Data preparation and model comparison of prediction methods using the Boston dataset. The dataset consist of housing in the area of Boston and numerous demographic variables connected with housing prices and nitrous oxide concentration. The target variable was the latter and best method **MISSING** achived **MISSING** accuracy. This model seems usable to predict the cases with reasonable accuracy. However, the best models achieve even better results using the [machine learning methodology](https://olegleyz.github.io/boston_housing.html).
+
+
 Today we are looking at the Boston **nitrogen oxides concentration**.
+
+We know from the previous analysis that nitrogen oxides concentration is connected with the variables in the dataset. 
+
+1. My hypothesis is that we are able to predict the nitrogen oxides concentration by using variables included in the dataset.
+2. My aim is to pick minimun number of parameters in final model to predict the concentration with highest accuracy.
+3. I will provide model comparison in the end of the exercise for the dataset.
 
 ### Boston Data set information:
 
@@ -29,7 +39,11 @@ black         | 1000(Bk - 0.63)^2 where Bk is the proportion of blacks by town.
 lstat         | lower status of the population (percent).
 medv          | median value of owner-occupied homes divided by $1000s.
 
-All are numeric variables except "chas", "rad" "tax". The data has demographical data of Boston (N = 506) including tax and several variables possibly linked to crime rates within the city. However, in the previous exercise we found that nitrogen oxide concentration is linked to crime and other demographic variables, so we are going to explore how they are linked. In the [data preparation](https://github.com/toparvia/IODS-final/blob/master/IODS-final_dataprep.TP.r) we looked at the normality assumption of the data and found out that "crim", per capita crime rate might benefit from square transformation. Therefore the data is divided into three different datasets, which are further divided with random sample to train (70%) and tests(30%) datasets.
+From this [source](https://www.cs.toronto.edu/~delve/data/boston/bostonDetail.html) The dataset is derived from information collected by the U.S. Census Service concerning housing in the area of Boston Mass.
+
+The data was originally published by Harrison, D. and Rubinfeld, D.L. `Hedonic prices and the demand for clean air', J. Environ. Economics & Management, vol.5, 81-102, 1978.
+
+All variables are numeric variables except "chas", "rad" "tax". The data has demographical data of Boston (N = 506) including tax and several variables possibly linked to housing values within the city. However, in the previous exercise we found that nitrogen oxide concentration is linked to crime and other demographic variables, so we are going to explore how they are linked. In the [data preparation](https://github.com/toparvia/IODS-final/blob/master/IODS-final_dataprep.TP.r) we looked at the normality assumption of the data and found out that "crim", per capita crime rate might benefit from square transformation. Therefore the data is divided into three different datasets, which are further divided with random sample to train (70%) and tests (30%) datasets.
 
 1. Normal unchanged dataset
     + 1a Normal train
@@ -40,6 +54,18 @@ All are numeric variables except "chas", "rad" "tax". The data has demographical
 3. Scaled dataset with the "crim" variable transformed with the square transformation
     + 3a transformed and scaled train
     + 3b transformed and scaled test
+
+I used four different methods for trying to find optimal method for predicting nitrogen oxide concentration.
+
+1. LR:  Linear regression
+    + to find linear relationships
+2. PCA: Pricipal component analysis
+    + to reduce dimensions
+3. PCR: Principal component regression
+    + to use reduced dimensions for predictions
+4. PCG: Principal component Generalized additive models with integrated smoothness estimation using y-scaled data
+    + to further lower dimensionality (y-scaling) 
+    + non-linear relationships of reduced dimensions
 
 ## Data exploration
 
@@ -146,7 +172,7 @@ ggplot(data = BostonGraph, mapping = aes(x = value)) +
 ```
 
 1. Figure shows the QQ-plots of all variables and their two transformations: log- and square-transformation.
-+ differences are not big and the only variable that showed non-normality in Shapiro-–Wilk test (p < 0.05) was crime rate.
++ differences are not big and the only variable that showed non-normality in Shapiro-Wilk test (p < 0.05) was crime rate.
 2. Second figure shows histograms of same variables. We can see how the transformations change the data.
 
 ## Linear regression: Normal dataset
@@ -167,8 +193,11 @@ anova(m, m2, test="Chisq")
 # By AIC more parsimonious model (m2) is better.
 par(mfrow=c(2,2))
 plot(m2)
-#dev.off()
+dev.off()
+```
+Model validation is not perfect. We can observe skewd residuals to positive in the lower end of values, and we have some outliers (153, 156, 157).
 
+```{r, message=FALSE, warning=FALSE}
 # Let's look at the data again with the same variables as in M2
 #g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
 #g
@@ -202,9 +231,9 @@ ScatterHist(lm.scatter, "pred.test", "nox",
 mse.train <- summary(m2)$sigma^2
 mse.test  <- sum((pred.test - testb$nox)^2)/(nrow(testb)-length(trainb)-2)
 
-mse.train
-mse.test
-(1-mse.train/mse.test) *100
+# mse.train
+# mse.test
+mse.ratio <- (1-mse.train/mse.test) *100
 # Mean squared error ratio is 25.1 %
 # This suggests that the new test data can be predicted with some accuracy than the train data.
 
@@ -224,20 +253,21 @@ Model: linear regression **nox** ~ crim + indus + chas + age + dis + rad + ptrat
 ```{r, message=FALSE, warning=FALSE}
 ms <- lm(nox ~ ., data = trainbs)
 
-# Model is able to explain 78 %
-stepAIC(m, direction = "both")
+# Model is able to explain 76.3 %
+#stepAIC(ms, direction = "both")
 
-ms2 <- lm(nox ~ crim + indus + zn + age + dis + rad + rm + ptratio + black + medv, data = trainbs)
+ms2 <- lm(nox ~ crim + indus + chas + age + dis + rad + ptratio + 
+    medv, data = trainbs)
 
 # Which is better m or m2 by AIC?
 
-AIC(ms,ms2)
-anova(ms2, ms, test="Chisq")
+#AIC(ms,ms2)
+#anova(ms2, ms, test="Chisq")
 
 # By AIC more parsimonious model is better.
-par(mfrow=c(2,2))
-plot(ms2)
-dev.off()
+# par(mfrow=c(2,2))
+# plot(ms2)
+# dev.off()
 # Let's look at the data again with the same variables as in M2
 # g = ggpairs(trainb,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
 # g
@@ -247,42 +277,119 @@ summary(ms2)
 # R2 = 76.5 % R-squared is worse.
 
 # Testing how the predicted values fit with the actual values
-pred.s <- predict(m2, newdata = testbs)
+pred.s <- predict(ms2, newdata = testbs)
 
 #Taking the values for plotting
-lm.scatter.s <- data.frame(pred.s, testb$nox)
-colnames(lm.scatter.s) <- c("pred.test","nox")
+lm.scatter.s <- data.frame(pred.s, testbs$nox)
+colnames(lm.scatter.s) <- c("pred.test.scaled","nox")
 #Neatest
-ScatterHist(lm.scatter, "pred.test", "nox",
+ScatterHist(lm.scatter.s, "pred.test.scaled", "nox",
             smoothmethod="identity",
             annot_size=3,
             title="Recovered model versus truth (Scaled dataset, Linear regression)")
 
 #Calculating mean squared error
-pred.test.s <- predict(m2, newdata = testbs)
-mse.train.s <- summary(m2)$sigma^2
+pred.test.s <- predict(ms2, newdata = testbs)
+mse.train.s <- summary(ms2)$sigma^2
 mse.test.s  <- sum((pred.test.s - testbs$nox)^2)/(nrow(testbs)-length(trainbs)-2)
 
-mse.train.s
-mse.test.s
-(1-mse.train.s/mse.test.s)*100
-# Mean squared error ratio is 11.3 % Poorer prediction
-# This suggests that the new data can be predicted with good accuracy, scaling decreased peformance by 11 % on new data. Perhaps overfit?
+# mse.train.s
+# mse.test.s
+mse.ratio.s <- (1-mse.train.s/mse.test.s)*100
+# Mean squared error ratio was  1.82 %  
+# This suggests that the new data can be predicted with good accuracy, scaling lowered slightly the performance.
 
 
 ```
 
-#HEREEEEEEEEEEEEEEEEEEEEEE
-
-In the high -crime quartile, we could predict all cases, but for other classes we didn't do so well. However, LDA seems to be able to predict our cases with quite good accuracy.
+Scaled dataset
+1. The linear regression was relatively good model to predit the nitrous oxide concentration (train, R^2 adj. **76.8 %**)
+2. The test set provided also good accuracy with (test, R^2 **80.4 %**)
+3. The three most influential variables were ptratio: pupil-teacher ratio by town (p = 6.01e-14) rad: index of accessibility to radial highways (p = 1.64e-12), dis: weighted mean of distances to five Boston employment centres (p = 4.28e-11).
+  + with scaling the importance of variables is different.
+4. We reduced variables to **9** (using Akaike Information criteria to find the best model), but we have many significant variables. This makes the the model more difficult to use in practice.
 
 ## Linear regression: Scaled and transformed dataset
 
 ```{r, message=FALSE, warning=FALSE}
+mssq <- lm(nox ~ ., data = trainbssq)
+
+# Model is able to explain 76.3 %
+# stepAIC(mssq, direction = "both")
+
+mssq2 <- lm(nox ~ indus + age + dis + rad + ptratio + medv, data = trainbssq)
+
+# Variables: 6.
+
+# Which is better m or m2 by AIC?
+
+AIC(mssq,mssq2)
+anova(mssq2, mssq)
+
+# By AIC more parsimonious model is better.
+# par(mfrow=c(2,2))
+# plot(mssq2)
+# dev.off()
+
+# Let's look at the data again with the same variables as in M2
+# g = ggpairs(trainbssq,columns = c(1,3,7:8,10,14), lower = list(continuous = my_fn))
+# g
+# summary(mssq2)
+# summary(mssq2)$r.squared
+# We still have quite many dimensions in the data. Maybe we could lower the dimensions using PCA?
+# R2 = 76.5 %
+
+# Testing how the predicted values fit with the actual values
+pred.ssq <- predict(mssq2, newdata = testbssq)
+
+#simple
+# plot(pred.ssq,trainbssq$nox, xlab="predicted",ylab="actual")
+# abline(a=0,b=1)
+
+#Taking the values for plotting
+lm.scatter.ssq <- data.frame(pred.ssq, testbssq$nox)
+colnames(lm.scatter.ssq) <- c("pred.test.scaled.transformed","nox")
+#Neatest
+ScatterHist(lm.scatter.ssq, "pred.test.scaled.transformed", "nox",
+            smoothmethod="identity",
+            annot_size=3,
+            title="Recovered model versus truth (Scaled dataset, transformed crim, Linear regression)")
+
+#Calculating mean squared error
+pred.test.ssq <- predict(mssq2, newdata = testbssq)
+mse.train.ssq <- summary(mssq2)$sigma^2
+mse.test.ssq  <- sum((pred.test.ssq - testbssq$nox)^2)/(nrow(testbssq)-length(trainbssq)-2)
+
+#mse.train.ssq
+#mse.test.ssq
+mse.ratio.ssq <- (1-mse.train.ssq/mse.test.ssq)*100
+# Mean squared error ratio is 16 %
+# This suggests that the new data can be predicted with good accuracy.
 
 ```
-## Conclusions
+Scaled dataset and transformed crim -variable 
+1. The linear regression was relatively good model to predit the nitrous oxide concentration (train, R^2 adj. **76.9 %**)
+2. The test set provided also good accuracy with (test, R^2 **79.2 %**)
+3. The three most influential variables were ptratio: pupil-teacher ratio by town (p = 2.89e-14) rad: index of accessibility to radial highways (p = 2.00e-13), dis: weighted mean of distances to five Boston employment centres (p = 2.53e-10).
+  + with scaling the importance of variables is different.
+  + crim variable is no longer relevant in the model after scaling.
+4. We reduced variables to **6** (using Akaike Information criteria to find the best model), but we have many significant variables. This makes the the model more difficult to use in practice.
+5. We can observe, in Residuals vs Fitted plot, skewdness of residuals in lower values in all models (see below).
+```{r, message=FALSE, warning=FALSE}
+plot(mssq2, 1)
 
+```
+
+#HEREEEEEEEEEEEE
+
+**MAYBE TRY USING THE BOOT ?**
+
+## Conclusions
+Dataset             | Test R^2       | Test MSE | Test/Train MSE ratio
+----------          | ---            | ---      | --- 
+Normal              | per            | Test MSE | Test MSE
+Scaled              | per            | Test MSE | Test MSE
+Scaled trans. "crim"| per            | Test MSE | Test MSE
 ```{r, message=FALSE, warning=FALSE}
 
 
